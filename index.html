@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>S-64 & S-19 Advanced Log Terminal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #C30233; 
+            --accent-blue: #13243F;
+            --paper-width: 595px;
+            --paper-height: 842px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0; display: flex; height: 100vh;
+            font-family: 'Roboto', sans-serif; background: #1a1a1a; color: white;
+            overflow: hidden;
+        }
+
+        /* --- SIDEBAR --- */
+        #sidebar {
+            width: 420px; background: #252525; border-right: 2px solid #000;
+            display: flex; flex-direction: column; padding: 15px; overflow-y: auto;
+            flex-shrink: 0; z-index: 10;
+        }
+        .group { margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        label { display: block; font-size: 11px; text-transform: uppercase; color: #aaa; margin-bottom: 4px; font-weight: bold; }
+        input, textarea, select {
+            width: 100%; background: #333; border: 1px solid #555; color: white;
+            padding: 8px; border-radius: 4px; font-size: 13px; margin-bottom: 8px;
+        }
+        .btn-del { background: #ff4d4d; color: white; border: none; padding: 6px; cursor: pointer; border-radius: 3px; font-size: 10px; width: 100%; margin-top: 5px; font-weight: bold; }
+        .btn-add { background: #018CB5; color: white; border: none; padding: 10px; cursor: pointer; width: 100%; font-weight: bold; margin-bottom: 10px;}
+        #exportBtn { background: #DFA956; color: #000; border: none; padding: 15px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+
+        /* --- PREVIEW AREA --- */
+        #preview-area {
+            flex: 1; background: #525659; overflow: auto;
+            display: flex; justify-content: center;
+            padding: 50px 0;
+        }
+        #pdf-render-container { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 40px; 
+            align-items: center; 
+        }
+
+        /* --- THE PAGE --- */
+        .page {
+            width: var(--paper-width); 
+            height: var(--paper-height);
+            background-color: var(--bg-color); 
+            color: var(--accent-blue);
+            padding: 45px 50px; 
+            position: relative; 
+            display: flex; 
+            flex-direction: column;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7); 
+            overflow: hidden; 
+            flex-shrink: 0;
+        }
+        
+        /* Dynamic Site Header */
+        .header { display: flex; align-items: center; border-bottom: 4px solid var(--accent-blue); padding-bottom: 5px; flex-shrink: 0; }
+        .h-left-s64 { display: flex; align-items: center; flex: 1; }
+        .h-left-s64 .big-s { font-family: 'Oswald'; font-size: 65px; font-weight: 700; line-height: 0.8; margin-right: 15px; }
+        .h-left-s64 .divider { width: 3px; height: 50px; background: var(--accent-blue); margin-right: 15px; }
+        .h-left-s64 .site-text { font-family: 'Oswald'; font-size: 22px; font-weight: 700; text-transform: uppercase; }
+        
+        .h-right img { height: 80px; width: 80px; object-fit: contain; }
+
+        .class-bar { display: flex; background: var(--accent-blue); margin: 10px 0; border: 2px solid var(--accent-blue); flex-shrink: 0; }
+        .class-item { flex: 1; text-align: center; color: var(--bg-color); font-family: 'Oswald'; font-size: 12px; padding: 3px 0; border-right: 1px solid var(--bg-color); }
+        .class-item.active { background: #DFA956; color: var(--accent-blue); }
+
+        .main-title { 
+            border: 6px solid #000;
+            color: #000; 
+            font-family: 'Oswald'; 
+            font-size: 36px; 
+            text-align: center; 
+            padding: 15px; 
+            margin: 20px 0; 
+            text-transform: uppercase;
+            font-weight: 700;
+            background: transparent;
+        }
+
+        .watermark { display: flex; justify-content: center; margin: 10px 0; height: 150px; }
+        .watermark img { height: 100%; opacity: 0.85; object-fit: contain; }
+
+        .meta-container { display: flex; border: 4px solid var(--accent-blue); margin-top: auto; min-height: 260px; }
+        .meta-col { flex: 1; padding: 15px; font-size: 12px; line-height: 1.6; }
+        .meta-col:first-child { border-right: 4px solid var(--accent-blue); }
+        .bold { font-weight: 900; }
+
+        .section-box { border: 3px solid var(--accent-blue); padding: 15px; margin-bottom: 15px; width: 100%; }
+        /* A utility class for when we need to break a box visually but keep flow */
+        .section-box.no-bottom { border-bottom: none; margin-bottom: 0; padding-bottom: 5px; }
+        .section-box.no-top { border-top: none; margin-top: 0; padding-top: 5px; }
+
+        .section-head { background: var(--accent-blue); color: var(--bg-color); font-family: 'Oswald'; font-size: 22px; text-align: center; margin-bottom: 10px; text-transform: uppercase; }
+        .content-text { white-space: pre-wrap; font-weight: 700; font-size: 14px; word-break: break-word; line-height: 1.4; }
+
+        .pic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .pic-item { border: 2px solid var(--accent-blue); background: #000; height: 160px; position: relative; overflow: hidden; }
+        .pic-item img { width: 100%; height: 100%; object-fit: cover; }
+        .pic-cap { 
+            position: absolute; 
+            bottom: 0; 
+            background: rgba(19, 36, 63, 0.9); 
+            color: white; 
+            width: 100%; 
+            font-size: 10px; 
+            text-align: center; 
+            padding: 4px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Signature Container - now positioned manually via JS or flex */
+        .signature-container { 
+            margin-top: auto; 
+            width: 100%; 
+            display: flex; 
+            justify-content: flex-end; 
+            min-height: 80px;
+        }
+        .signature { font-family: 'Brush Script MT', cursive; font-size: 44px; color: #000; padding-bottom: 10px; border-bottom: 2px solid #000; min-width: 200px; text-align: center;}
+        
+        #height-measurer { position: absolute; visibility: hidden; width: 495px; font-weight: 700; font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="group">
+        <label>Site Location</label>
+        <select id="inp_site" onchange="updateUI()">
+            <option value="64">Site 64</option>
+            <option value="19">Site 19</option>
+        </select>
+        <label>Theme Color</label>
+        <select id="inp_color" onchange="updateUI()">
+            <option value="#C30233">Keter</option>
+            <option value="#018CB5">Euclid</option>
+            <option value="#669d34">Safe</option>
+        </select>
+        <label>Classification</label>
+        <select id="inp_class" onchange="updateUI()">
+            <option>Public</option><option>Private</option><option>Internal</option><option>Confidential</option><option selected>Secret</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <label>Report Header</label>
+        <input type="text" id="inp_title" value="Test title" oninput="updateUI()">
+        <input type="text" id="inp_scp" value="The number" oninput="updateUI()">
+        <input type="text" id="inp_classif" value="The classification" oninput="updateUI()">
+        <input type="text" id="inp_date" value="Current date" oninput="updateUI()">
+    </div>
+
+    <div class="group">
+        <label>Personnel</label>
+        <input type="text" id="inp_res" placeholder="Researchers" value="Your names" oninput="updateUI()">
+        <input type="text" id="inp_ranks" placeholder="Ranks" value="Your ranks" oninput="updateUI()">
+    
+        <textarea id="inp_over" placeholder="Overseeing Personnel" oninput="updateUI()">Overseeing Personnel</textarea>
+        <textarea id="inp_comb" placeholder="Combative Personnel" oninput="updateUI()">Combatives</textarea>
+        <textarea id="inp_med" placeholder="Meds" oninput="updateUI()">Medicals</textarea>
+        <textarea id="inp_classd" placeholder="Class Ds" oninput="updateUI()">Class Ds</textarea>
+        <textarea id="inp_vis" placeholder="Visitors" oninput="updateUI()">Everyone else</textarea>
+    </div>
+
+    <div class="group">
+        <label>Content</label>
+        <textarea id="inp_desc" oninput="updateUI()" style="height:80px" placeholder="Test Description">Description of the test (preparation and execution)</textarea>
+        <textarea id="inp_conc" oninput="updateUI()" placeholder="Conclusion">What info or ideas you got from the test</textarea>
+        <label>Radio Logs</label>
+        <textarea id="inp_radio" oninput="updateUI()" style="height:120px" placeholder="Radio Log">The radio logs</textarea>
+    </div>
+
+    <div id="image-input-area"></div>
+    <button class="btn-add" onclick="addNewImage()">Add research image</button>
+
+    <div class="group">
+        <label>Authorization Signature</label>
+        <input type="text" id="inp_sig" value="Your signature" placeholder="Signature Name" oninput="updateUI()">
+    </div>
+
+    <button id="exportBtn" onclick="exportToPDF()">EXPORT PDF</button>
+</div>
+
+<div id="preview-area">
+    <div id="pdf-render-container"></div>
+    <div id="height-measurer"></div>
+</div>
+
+<script>
+    let images = [];
+
+    // Trigger update only, do NOT re-render inputs to keep focus
+    function updateUI() {
+        const color = document.getElementById('inp_color').value;
+        document.documentElement.style.setProperty('--bg-color', color);
+        renderPreview();
+    }
+
+    function updateCaption(index, val) {
+        images[index].cap = val;
+        updateUI();
+    }
+
+    function addNewImage() {
+        images.push({src: null, cap: 'Image Caption'});
+        renderImageInputs();
+        updateUI();
+    }
+    
+    function deleteImage(index) {
+        images.splice(index, 1);
+        renderImageInputs();
+        updateUI();
+    }
+
+    function renderImageInputs() {
+        const area = document.getElementById('image-input-area');
+        area.innerHTML = '<label>Pictures</label>';
+        images.forEach((img, i) => {
+            const div = document.createElement('div');
+            div.style.background = "#333";
+            div.style.padding = "5px";
+            div.style.marginBottom = "5px";
+            
+            // Clean handling of quotes
+            const safeCap = img.cap.replace(/"/g, '&quot;');
+            
+            div.innerHTML = `
+                <input type="text" value="${safeCap}" oninput="updateCaption(${i}, this.value)">
+                <input type="file" onchange="readImg(this, ${i})" style="font-size:10px">
+                <button class="btn-del" onclick="deleteImage(${i})">Delete</button>
+            `;
+            area.appendChild(div);
+        });
+    }
+
+    function readImg(input, i) {
+        if (input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => { images[i].src = e.target.result; updateUI(); };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function createPageShell() {
+        const p = document.createElement('div');
+        p.className = 'page';
+        const active = document.getElementById('inp_class').value;
+        const site = document.getElementById('inp_site').value;
+        
+        let headerHtml = "";
+        if(site === "64") {
+            headerHtml = `
+                <div class="h-left-s64">
+                    <div class="big-s">S-64</div>
+                    <div class="divider"></div>
+                    <div class="site-text">Site 64<br>Faction</div>
+                </div>`;
+        } else {
+            headerHtml = `
+                <div class="h-left-s64">
+                    <div class="big-s">S-19</div>
+                    <div class="divider"></div>
+                    <div class="site-text">Site 19<br>Main Facility</div>
+                </div>`;
+        }
+
+        p.innerHTML = `
+            <div class="header">
+                ${headerHtml}
+                <div class="h-right"><img src="logo.png" onerror="this.src='https://i.imgur.com/83p731G.png'"></div>
+            </div>
+            <div class="class-bar">
+                ${['Public','Private','Internal','Confidential','Secret'].map(c => 
+                    `<div class="class-item ${active===c?'active':''}">${c}</div>`
+                ).join('')}
+            </div>
+        `;
+        return p;
+    }
+
+    function renderPreview() {
+        const container = document.getElementById('pdf-render-container');
+        container.innerHTML = '';
+
+        // PAGE 1: META & HEADER
+        const p1 = createPageShell();
+        p1.innerHTML += `
+            <div class="main-title">${document.getElementById('inp_title').value}</div>
+            <div class="watermark"><img src="scdlogo.png" onerror="this.src='https://i.imgur.com/K6RovbO.png'"></div>
+            <div class="meta-container">
+                <div class="meta-col">
+                    <div><span class="bold">SCP:</span> ${document.getElementById('inp_scp').value}</div>
+                    <div><span class="bold">Classification:</span> ${document.getElementById('inp_classif').value}</div>
+                    <div><span class="bold">Date:</span> ${document.getElementById('inp_date').value}</div>
+                    <div><span class="bold">Researchers:</span> ${document.getElementById('inp_res').value}</div>
+                    <div><span class="bold">Ranks:</span> ${document.getElementById('inp_ranks').value}</div>
+                </div>
+                <div class="meta-col">
+                    <div><span class="bold">Medical:</span> ${document.getElementById('inp_med').value}</div>
+                    <div><span class="bold">Visitors:</span> ${document.getElementById('inp_vis').value}</div>
+                    <div><span class="bold">Class-D:</span> ${document.getElementById('inp_classd').value}</div>
+                    <div><span class="bold">Overseeing:</span> ${document.getElementById('inp_over').value}</div>
+                    <div><span class="bold">Combatives:</span> ${document.getElementById('inp_comb').value}</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(p1);
+
+        // --- CONTENT FLOW ---
+        let currentPage = createPageShell();
+        container.appendChild(currentPage);
+        let currentY = 0;
+        const pageLimit = 640; // Reduced slightly to account for signature buffer
+
+        // 1. Text Sections
+        const contentSections = [
+            { title: 'Test Description', text: document.getElementById('inp_desc').value },
+            { title: 'Conclusion', text: document.getElementById('inp_conc').value }
+        ];
+
+        contentSections.forEach(sec => {
+            if(!sec.text.trim()) return;
+            const h = measureHeight(sec.text) + 80;
+            if(currentY + h > pageLimit) {
+                currentPage = createPageShell(); container.appendChild(currentPage); currentY = 0;
+            }
+            const box = document.createElement('div');
+            box.className = 'section-box';
+            box.innerHTML = `<div class="section-head">${sec.title}</div><div class="content-text">${sec.text}</div>`;
+            currentPage.appendChild(box);
+            currentY += h;
+        });
+
+        // 2. Images (with Row-Based Overflow)
+        if(images.length > 0) {
+            // Check if we need to start on a new page even for the header
+            if(currentY + 60 > pageLimit) {
+                 currentPage = createPageShell(); container.appendChild(currentPage); currentY = 0;
+            }
+
+            // Create wrapper for the first batch
+            let picBox = document.createElement('div');
+            picBox.className = 'section-box';
+            let grid = document.createElement('div');
+            grid.className = 'pic-grid';
+            
+            picBox.innerHTML = `<div class="section-head">Research Pictures</div>`;
+            picBox.appendChild(grid);
+            currentPage.appendChild(picBox);
+            
+            // Header height
+            currentY += 50; 
+            
+            // Process images in pairs
+            for (let i = 0; i < images.length; i += 2) {
+                const rowHeight = 175; // Approx height of image + caption + gap
+                
+                // If this row will overflow the page
+                if(currentY + rowHeight > pageLimit) {
+                    // Create new page
+                    currentPage = createPageShell(); 
+                    container.appendChild(currentPage); 
+                    currentY = 0;
+                    
+                    // New Box on new page
+                    picBox = document.createElement('div');
+                    picBox.className = 'section-box';
+                    picBox.innerHTML = `<div class="section-head">Research Pictures (Cont.)</div>`;
+                    grid = document.createElement('div');
+                    grid.className = 'pic-grid';
+                    picBox.appendChild(grid);
+                    currentPage.appendChild(picBox);
+                    currentY += 50; // Header height
+                }
+                
+                // Add img 1
+                const img1 = images[i];
+                grid.innerHTML += `<div class="pic-item">${img1.src?`<img src="${img1.src}">`:''}<div class="pic-cap">${img1.cap}</div></div>`;
+                
+                // Add img 2 if exists
+                if(i + 1 < images.length) {
+                    const img2 = images[i+1];
+                    grid.innerHTML += `<div class="pic-item">${img2.src?`<img src="${img2.src}">`:''}<div class="pic-cap">${img2.cap}</div></div>`;
+                }
+                
+                currentY += rowHeight;
+            }
+            // Add padding after last image box
+            currentY += 20; 
+        }
+
+        // 3. Radio Logs (Refined Overflow Logic)
+        const radioText = document.getElementById('inp_radio').value;
+        if(radioText.trim()) {
+            const lines = radioText.split('\n');
+            let logChunk = "";
+            let chunkStart = true;
+            
+            lines.forEach((line, idx) => {
+                const testChunk = logChunk + line + "\n";
+                // +80 accounts for headers
+                const h = measureHeight(testChunk) + 80;
+
+                if(currentY + h > pageLimit) {
+                    // Render what fits
+                    renderRadioBox(currentPage, chunkStart ? "Radio Log" : "Radio Log (Cont.)", logChunk);
+                    
+                    // New Page
+                    currentPage = createPageShell(); 
+                    container.appendChild(currentPage); 
+                    currentY = 0;
+                    
+                    // Reset chunk
+                    logChunk = line + "\n";
+                    chunkStart = false;
+                } else {
+                    logChunk = testChunk;
+                }
+
+                // Render last piece
+                if(idx === lines.length - 1) {
+                    renderRadioBox(currentPage, chunkStart ? "Radio Log" : "Radio Log (Cont.)", logChunk);
+                    currentY += measureHeight(logChunk) + 80;
+                }
+            });
+        }
+
+        // 4. Smart Signature Logic
+        // Check if there is enough space left on the current page for the signature (approx 120px)
+        const spaceLeft = 842 - 100 - currentY; // 842 is total height, 100 padding buffer
+        if (spaceLeft < 150) {
+            // Not enough space, push to new page
+            currentPage = createPageShell();
+            container.appendChild(currentPage);
+        }
+        
+        // Append signature
+        const sigContainer = document.createElement('div');
+        sigContainer.className = 'signature-container';
+        sigContainer.innerHTML = `<div class="signature">${document.getElementById('inp_sig').value}</div>`;
+        currentPage.appendChild(sigContainer);
+    }
+
+    function renderRadioBox(page, title, text) {
+        if(!text) return;
+        const box = document.createElement('div');
+        box.className = 'section-box';
+        box.innerHTML = `<div class="section-head">${title}</div><div class="content-text">${text}</div>`;
+        page.appendChild(box);
+    }
+
+    function measureHeight(text) {
+        const m = document.getElementById('height-measurer');
+        m.innerText = text;
+        return m.offsetHeight;
+    }
+
+    async function exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'pt', 'a4');
+        const pages = document.querySelectorAll('.page');
+        for (let i = 0; i < pages.length; i++) {
+            if (i > 0) doc.addPage();
+            const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
+            doc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 595, 842);
+        }
+        doc.save("Site_Log.pdf");
+    }
+
+    updateUI();
+</script>
+</body>
+</html>
